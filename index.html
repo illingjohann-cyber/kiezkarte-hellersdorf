@@ -16,7 +16,7 @@ tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter','system-ui',
   html, body { height: 100%; }
   .pin { width: 34px; height: 34px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
          border: 3px solid #fff; box-shadow: 0 4px 10px rgba(15,23,42,.35); transition: transform .15s; }
-  .pin > span { display:block; transform: rotate(45deg); text-align:center; line-height:28px; font-size:14px; }
+  .pin > span { display:flex; align-items:center; justify-content:center; width:100%; height:100%; transform: rotate(45deg); }
   .pin:hover, .pin.active { transform: rotate(-45deg) scale(1.2); }
   .leaflet-popup-content-wrapper { border-radius: 16px; box-shadow: 0 12px 32px rgba(15,23,42,.2); padding: 0; }
   .leaflet-popup-content { margin: 0; width: 280px !important; }
@@ -31,8 +31,16 @@ tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter','system-ui',
 
   <!-- Seitenleiste -->
   <aside class="lg:w-[400px] lg:h-full min-h-0 flex-1 lg:flex-none flex flex-col bg-white shadow-xl z-[1000] order-2 lg:order-1">
-    <header class="px-6 pt-6 pb-4">
-      <p class="text-xs font-semibold tracking-widest text-slate-400 uppercase">Quartiersmanagement</p>
+    <div class="h-1.5 bg-[#F8C834]"></div>
+    <header class="px-6 pt-5 pb-4">
+      <a href="https://georg-georg.de" target="_blank" rel="noopener" class="flex items-center gap-3 group">
+        <img src="assets/georg-georg-logo.png" alt="georg + georg" class="w-14 h-14 rounded-xl object-cover ring-1 ring-slate-200 shadow-sm">
+        <span class="leading-tight">
+          <span class="block text-lg font-bold text-slate-900" style="font-family:'Trebuchet MS',Inter,sans-serif">georg <span class="text-[#F8C834]">+</span> georg</span>
+          <span class="block text-[11px] text-slate-400 group-hover:text-slate-600 transition">georg+georg gmbh · Berlin</span>
+        </span>
+      </a>
+      <p class="mt-5 text-xs font-semibold tracking-widest text-slate-400 uppercase">Quartiersmanagement</p>
       <h1 class="mt-1 text-2xl font-bold tracking-tight text-slate-900">Kiezkarte Alte Hellersdorfer Straße</h1>
       <p class="mt-1 text-sm text-slate-500">Einrichtungen im Kiez – Freizeit &amp; Kultur, Schulen, Kitas</p>
     </header>
@@ -52,7 +60,7 @@ tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter','system-ui',
     </div>
     <ul id="list" class="flex-1 min-h-0 overflow-y-auto scroll-thin px-3 pb-4 space-y-1"></ul>
     <footer class="px-6 py-3 border-t border-slate-100 text-[11px] text-slate-400">
-      Stand 06.10.2026 · Kartendaten © OpenStreetMap-Mitwirkende
+      Erstellt von <a href="https://georg-georg.de" target="_blank" rel="noopener" class="font-semibold text-slate-500 hover:text-slate-900">georg+georg</a> · Stand 06.10.2026 · Kartendaten © OpenStreetMap-Mitwirkende
     </footer>
   </aside>
 
@@ -66,10 +74,14 @@ tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter','system-ui',
 <script src="data/einrichtungen.js"></script>
 <script>
 const CATS = {
-  kultur: { label: 'Freizeit & Kultur', color: '#f59e0b', soft: 'bg-amber-50 text-amber-700 ring-amber-200', icon: '🎭' },
-  schule: { label: 'Schulen',           color: '#3b82f6', soft: 'bg-blue-50 text-blue-700 ring-blue-200',   icon: '🎓' },
-  kita:   { label: 'Kitas',             color: '#10b981', soft: 'bg-emerald-50 text-emerald-700 ring-emerald-200', icon: '🧸' },
+  kultur: { label: 'Freizeit & Kultur', color: '#d97706', soft: 'bg-amber-50 text-amber-700 ring-amber-200',  g: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>' },
+  schule: { label: 'Schulen',           color: '#2563eb', soft: 'bg-blue-50 text-blue-700 ring-blue-200',    g: '<path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>' },
+  kita:   { label: 'Kitas',             color: '#059669', soft: 'bg-emerald-50 text-emerald-700 ring-emerald-200', g: '<circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9.5h.01M15 9.5h.01"/>' },
 };
+Object.values(CATS).forEach(c => c.icon = svgIcon(c.g, 16));
+function svgIcon(g, s, color = 'currentColor') {
+  return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block">${g}</svg>`;
+}
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 // Punkte mit identischer Adresse leicht versetzen, damit alle Pins sichtbar bleiben
@@ -118,7 +130,7 @@ function popupHtml(e) {
 items.forEach(e => {
   const c = CATS[e.kategorie];
   const icon = L.divIcon({ className: '', iconSize: [34, 34], iconAnchor: [17, 34], popupAnchor: [0, -34],
-    html: `<div class="pin" style="background:${c.color}"><span>${c.icon}</span></div>` });
+    html: `<div class="pin" style="background:${c.color}"><span>${svgIcon(c.g, 16, '#fff')}</span></div>` });
   const m = L.marker([e.plat, e.plng], { icon, title: e.name });
   m.bindPopup(popupHtml(e), { closeButton: true, autoPanPadding: [40, 40] });
   m.on('click', () => highlight(e.id));
@@ -152,7 +164,7 @@ function renderList(vis) {
   ul.innerHTML = vis.length ? vis.map(e => {
     const c = CATS[e.kategorie];
     return `<li><button data-id="${e.id}" class="w-full text-left flex gap-3 items-start p-3 rounded-xl hover:bg-slate-50 transition">
-      <span class="mt-0.5 shrink-0 w-8 h-8 rounded-lg grid place-items-center text-sm" style="background:${c.color}1f">${c.icon}</span>
+      <span class="mt-0.5 shrink-0 w-8 h-8 rounded-lg grid place-items-center" style="background:${c.color}1a;color:${c.color}">${c.icon}</span>
       <span class="min-w-0"><span class="block text-sm font-semibold text-slate-800 leading-snug">${esc(e.name)}</span>
       <span class="block text-xs text-slate-500 mt-0.5 truncate">${esc(e.adresse.replace(/, 126\d\d Berlin/, ''))}</span></span></button></li>`;
   }).join('') : '<li class="px-4 py-10 text-center text-sm text-slate-400">Keine Einrichtungen gefunden.</li>';
