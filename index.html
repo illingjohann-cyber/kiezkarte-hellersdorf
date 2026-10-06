@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiezkarte Alte Hellersdorfer Straße</title>
+<meta name="description" content="Interaktive Karte der Einrichtungen im Kiez rund um die Alte Hellersdorfer Straße: Freizeit &amp; Kultur, Schulen und Kitas.">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter','system-ui','sans-serif'] } } } };
+</script>
+<style>
+  html, body { height: 100%; }
+  .pin { width: 34px; height: 34px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+         border: 3px solid #fff; box-shadow: 0 4px 10px rgba(15,23,42,.35); transition: transform .15s; }
+  .pin > span { display:block; transform: rotate(45deg); text-align:center; line-height:28px; font-size:14px; }
+  .pin:hover, .pin.active { transform: rotate(-45deg) scale(1.2); }
+  .leaflet-popup-content-wrapper { border-radius: 16px; box-shadow: 0 12px 32px rgba(15,23,42,.2); padding: 0; }
+  .leaflet-popup-content { margin: 0; width: 280px !important; }
+  .leaflet-popup-close-button { top: 10px !important; right: 10px !important; }
+  .leaflet-container { font-family: Inter, system-ui, sans-serif; }
+  .scroll-thin::-webkit-scrollbar { width: 6px; }
+  .scroll-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+</style>
+</head>
+<body class="font-sans text-slate-800 bg-slate-100">
+<div class="h-full flex flex-col lg:flex-row">
+
+  <!-- Seitenleiste -->
+  <aside class="lg:w-[400px] lg:h-full min-h-0 flex-1 lg:flex-none flex flex-col bg-white shadow-xl z-[1000] order-2 lg:order-1">
+    <header class="px-6 pt-6 pb-4">
+      <p class="text-xs font-semibold tracking-widest text-slate-400 uppercase">Quartiersmanagement</p>
+      <h1 class="mt-1 text-2xl font-bold tracking-tight text-slate-900">Kiezkarte Alte Hellersdorfer Straße</h1>
+      <p class="mt-1 text-sm text-slate-500">Einrichtungen im Kiez – Freizeit &amp; Kultur, Schulen, Kitas</p>
+    </header>
+
+    <div class="px-6 space-y-4">
+      <div class="relative">
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="search" type="search" placeholder="Einrichtung oder Adresse suchen …"
+               class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-100 border border-transparent text-sm placeholder-slate-400 focus:bg-white focus:border-slate-300 focus:ring-4 focus:ring-slate-100 outline-none transition">
+      </div>
+      <div id="filters" class="flex flex-wrap gap-2"></div>
+    </div>
+
+    <div class="px-6 pt-4 pb-2 flex items-center justify-between text-xs text-slate-400">
+      <span id="count"></span>
+      <button id="reset" class="font-medium text-slate-500 hover:text-slate-900 transition">Zurücksetzen</button>
+    </div>
+    <ul id="list" class="flex-1 min-h-0 overflow-y-auto scroll-thin px-3 pb-4 space-y-1"></ul>
+    <footer class="px-6 py-3 border-t border-slate-100 text-[11px] text-slate-400">
+      Stand 06.10.2026 · Kartendaten © OpenStreetMap-Mitwirkende
+    </footer>
+  </aside>
+
+  <!-- Karte -->
+  <main class="relative order-1 lg:order-2 h-[45vh] lg:h-auto lg:flex-1">
+    <div id="map" class="absolute inset-0"></div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="data/einrichtungen.js"></script>
+<script>
+const CATS = {
+  kultur: { label: 'Freizeit & Kultur', color: '#f59e0b', soft: 'bg-amber-50 text-amber-700 ring-amber-200', icon: '🎭' },
+  schule: { label: 'Schulen',           color: '#3b82f6', soft: 'bg-blue-50 text-blue-700 ring-blue-200',   icon: '🎓' },
+  kita:   { label: 'Kitas',             color: '#10b981', soft: 'bg-emerald-50 text-emerald-700 ring-emerald-200', icon: '🧸' },
+};
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// Punkte mit identischer Adresse leicht versetzen, damit alle Pins sichtbar bleiben
+const seen = {};
+const items = window.EINRICHTUNGEN.filter(e => e.lat != null).map(e => {
+  const k = e.lat.toFixed(5) + ',' + e.lng.toFixed(5);
+  const n = seen[k] = (seen[k] ?? -1) + 1;
+  const a = n * 2.4;
+  return { ...e, plat: e.lat + (n ? Math.sin(a) * 0.00018 : 0), plng: e.lng + (n ? Math.cos(a) * 0.00028 : 0) };
+});
+
+const map = L.map('map', { zoomControl: false }).setView([52.5448, 13.5925], 16);
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19, attribution: '© OpenStreetMap-Mitwirkende'
+}).addTo(map);
+
+const state = { active: new Set(Object.keys(CATS)), q: '' };
+const markers = new Map();
+
+function popupHtml(e) {
+  const c = CATS[e.kategorie];
+  const row = (svg, inner) => `<div class="flex gap-2.5 text-[13px] text-slate-600"><span class="mt-0.5 text-slate-400">${svg}</span><div class="min-w-0 break-words">${inner}</div></div>`;
+  const I = {
+    pin: '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+    tel: '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2Z"/></svg>',
+    mail: '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
+    web: '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
+  };
+  const route = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.adresse)}`;
+  return `
+  <div class="p-5">
+    <span class="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full ring-1 ${c.soft}">${c.icon} ${c.label}</span>
+    <h3 class="mt-2 text-base font-bold leading-snug text-slate-900 pr-5">${esc(e.name)}</h3>
+    ${e.traeger ? `<p class="text-xs text-slate-400 mt-0.5">${esc(e.traeger)}</p>` : ''}
+    <div class="mt-3 space-y-1.5">
+      ${row(I.pin, esc(e.adresse))}
+      ${e.telefon ? row(I.tel, `<a class="hover:underline" href="tel:${esc(e.telefon.replace(/[^+\d]/g,''))}">${esc(e.telefon)}</a>`) : ''}
+      ${e.email ? row(I.mail, `<a class="hover:underline" href="mailto:${esc(e.email)}">${esc(e.email)}</a>`) : ''}
+      ${e.web ? row(I.web, `<a class="hover:underline" target="_blank" rel="noopener" href="${esc(e.web)}">Webseite</a>`) : ''}
+    </div>
+    <a href="${route}" target="_blank" rel="noopener" class="mt-4 flex items-center justify-center gap-2 text-[13px] font-semibold text-white rounded-xl py-2 transition hover:opacity-90" style="background:${c.color}">Route planen →</a>
+  </div>`;
+}
+
+items.forEach(e => {
+  const c = CATS[e.kategorie];
+  const icon = L.divIcon({ className: '', iconSize: [34, 34], iconAnchor: [17, 34], popupAnchor: [0, -34],
+    html: `<div class="pin" style="background:${c.color}"><span>${c.icon}</span></div>` });
+  const m = L.marker([e.plat, e.plng], { icon, title: e.name });
+  m.bindPopup(popupHtml(e), { closeButton: true, autoPanPadding: [40, 40] });
+  m.on('click', () => highlight(e.id));
+  markers.set(e.id, m);
+});
+
+function visible(e) {
+  const q = state.q.trim().toLowerCase();
+  return state.active.has(e.kategorie) && (!q || (e.name + ' ' + e.adresse + ' ' + e.traeger).toLowerCase().includes(q));
+}
+
+function renderFilters() {
+  const el = document.getElementById('filters');
+  el.innerHTML = Object.entries(CATS).map(([k, c]) => {
+    const on = state.active.has(k);
+    const n = items.filter(e => e.kategorie === k).length;
+    return `<button data-k="${k}" aria-pressed="${on}" class="inline-flex items-center gap-2 pl-3 pr-3.5 py-2 rounded-full text-sm font-medium border transition
+      ${on ? 'text-white border-transparent shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}"
+      style="${on ? `background:${c.color}` : ''}">
+      <span class="w-2.5 h-2.5 rounded-full ${on ? 'bg-white/90' : ''}" style="${on ? '' : `background:${c.color}`}"></span>
+      ${c.label}<span class="text-xs ${on ? 'text-white/80' : 'text-slate-400'}">${n}</span></button>`;
+  }).join('');
+  el.querySelectorAll('button').forEach(b => b.onclick = () => {
+    state.active.has(b.dataset.k) ? state.active.delete(b.dataset.k) : state.active.add(b.dataset.k);
+    update(true);
+  });
+}
+
+function renderList(vis) {
+  const ul = document.getElementById('list');
+  ul.innerHTML = vis.length ? vis.map(e => {
+    const c = CATS[e.kategorie];
+    return `<li><button data-id="${e.id}" class="w-full text-left flex gap-3 items-start p-3 rounded-xl hover:bg-slate-50 transition">
+      <span class="mt-0.5 shrink-0 w-8 h-8 rounded-lg grid place-items-center text-sm" style="background:${c.color}1f">${c.icon}</span>
+      <span class="min-w-0"><span class="block text-sm font-semibold text-slate-800 leading-snug">${esc(e.name)}</span>
+      <span class="block text-xs text-slate-500 mt-0.5 truncate">${esc(e.adresse.replace(/, 126\d\d Berlin/, ''))}</span></span></button></li>`;
+  }).join('') : '<li class="px-4 py-10 text-center text-sm text-slate-400">Keine Einrichtungen gefunden.</li>';
+  ul.querySelectorAll('button').forEach(b => b.onclick = () => {
+    const m = markers.get(+b.dataset.id);
+    map.flyTo(m.getLatLng(), 17, { duration: .6 });
+    m.openPopup(); highlight(+b.dataset.id);
+  });
+}
+
+function highlight(id) {
+  document.querySelectorAll('.pin.active').forEach(p => p.classList.remove('active'));
+  markers.get(id)?._icon?.querySelector('.pin')?.classList.add('active');
+}
+
+function update(fit) {
+  const vis = items.filter(visible);
+  markers.forEach((m, id) => { vis.some(e => e.id === id) ? m.addTo(map) : m.remove(); });
+  document.getElementById('count').textContent = `${vis.length} von ${items.length} Einrichtungen`;
+  renderFilters(); renderList(vis);
+  if (fit && vis.length) map.flyToBounds(L.latLngBounds(vis.map(e => [e.plat, e.plng])).pad(0.25), { duration: .6, maxZoom: 17 });
+}
+
+document.getElementById('search').addEventListener('input', e => { state.q = e.target.value; update(true); });
+document.getElementById('reset').onclick = () => {
+  state.active = new Set(Object.keys(CATS)); state.q = ''; document.getElementById('search').value = '';
+  map.closePopup(); update(true);
+};
+update(true);
+</script>
+</body>
+</html>
